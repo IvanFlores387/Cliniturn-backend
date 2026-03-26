@@ -5,7 +5,10 @@ const authRoutes = require('./routes/auth.routes.js');
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:4200',
+  origin: [
+    'http://localhost:4200',
+    'https://cliniturn-fronted.vercel.app'
+  ],
   credentials: true,
 }));
 
