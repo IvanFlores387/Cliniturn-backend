@@ -22,7 +22,19 @@ function generateToken(user) {
 
 async function register(req, res) {
   try {
-    const { nombre, email, password, role } = req.body;
+    const {
+  nombre,
+  email,
+  password,
+  role,
+  telefono,
+  apellidos,
+  matricula,
+  carrera,
+  cedula,
+  especialidad,
+  codigoAdmin
+} = req.body;
 
     if (!nombre || !email || !password || !role) {
       return res.status(400).json({
@@ -62,6 +74,14 @@ async function register(req, res) {
       password: hashedPassword,
       role,
       activo: true,
+
+      telefono: telefono || '',
+      apellidos: apellidos || '',
+      matricula: matricula || '',
+      carrera: carrera || '',
+      cedula: cedula || '',
+      especialidad: especialidad || '',
+      codigoAdmin: codigoAdmin || ''
     };
 
     db.users.push(newUser);

@@ -1,0 +1,57 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "nombre": "Ivan  Flores reyes",
+      "email": "ivanr@gmail.com",
+      "password": "$2b$10$hZZOpmVjRK1EtwFXLH.AhOSpQCbyiQEBZ9DarFIuPTju/Y0ZJfSLm",
+      "role": "paciente",
+      "activo": true
+    },
+    {
+      "id": 2,
+      "nombre": "Ivan  Flores Reyess",
+      "email": "ivan387@gmail.com",
+      "password": "$2b$10$0UgrNttV2g5e.r3PE0YARuu3sntG2QKzIU2vI9ZsP27Ht7Tr/1x22",
+      "role": "paciente",
+      "activo": true,
+      "telefono": "201151651165",
+      "apellidos": "Flores Reyess",
+      "matricula": "2021351147",
+      "carrera": "Ingenieria en tecnologias de la informacion",
+      "cedula": "",
+      "especialidad": "",
+      "codigoAdmin": ""
+    },
+    {
+      "id": 3,
+      "nombre": "Sanders Guzman Lezama",
+      "email": "sanders@gmail.com",
+      "password": "$2b$10$Q7Ej4ujwOz/nsdKzm80LuOUr86szHPOEmJu4t8ja6RkUlyJJpOLQa",
+      "role": "medico",
+      "activo": true,
+      "telefono": "215166165",
+      "apellidos": "Guzman Lezama",
+      "matricula": "",
+      "carrera": "",
+      "cedula": "566654654",
+      "especialidad": "Nutriologo",
+      "codigoAdmin": ""
+    },
+    {
+      "id": 4,
+      "nombre": "Esquizo Vera Chilaca",
+      "email": "esquizo@gmail.com",
+      "password": "$2b$10$/GD/ZEsoE9UEs/LZ50VDLuaDQDcWBg4qD/EP/AR98cfkfepgAdJXu",
+      "role": "admin",
+      "activo": true,
+      "telefono": "5466464651",
+      "apellidos": "Vera Chilaca",
+      "matricula": "",
+      "carrera": "",
+      "cedula": "",
+      "especialidad": "",
+      "codigoAdmin": "ADMIN01"
+    }
+  ]
+}
