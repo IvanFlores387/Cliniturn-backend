@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { readDb, writeDb } = require('../data/db');
+const db = require('../config/db');
 const env = require('../config/env');
 
 function sanitizeUser(user) {
@@ -23,18 +23,18 @@ function generateToken(user) {
 async function register(req, res) {
   try {
     const {
-  nombre,
-  email,
-  password,
-  role,
-  telefono,
-  apellidos,
-  matricula,
-  carrera,
-  cedula,
-  especialidad,
-  codigoAdmin
-} = req.body;
+      nombre,
+      email,
+      password,
+      role,
+      telefono,
+      apellidos,
+      matricula,
+      carrera,
+      cedula,
+      especialidad,
+      codigoAdmin
+    } = req.body;
 
     if (!nombre || !email || !password || !role) {
       return res.status(400).json({
@@ -51,14 +51,12 @@ async function register(req, res) {
       });
     }
 
-    const db = readDb();
-    db.users = db.users || [];
-
-    const emailExists = db.users.some(
-      (user) => user.email.toLowerCase() === email.toLowerCase()
+    const [existingUsers] = await db.execute(
+      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      [email.trim().toLowerCase()]
     );
 
-    if (emailExists) {
+    if (existingUsers.length > 0) {
       return res.status(409).json({
         ok: false,
         message: 'El correo ya está registrado.',
@@ -67,14 +65,44 @@ async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const [result] = await db.execute(
+      `INSERT INTO users (
+        nombre,
+        email,
+        password,
+        role,
+        activo,
+        telefono,
+        apellidos,
+        matricula,
+        carrera,
+        cedula,
+        especialidad,
+        codigoAdmin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nombre.trim(),
+        email.trim().toLowerCase(),
+        hashedPassword,
+        role,
+        true,
+        telefono || '',
+        apellidos || '',
+        matricula || '',
+        carrera || '',
+        cedula || '',
+        especialidad || '',
+        codigoAdmin || ''
+      ]
+    );
+
     const newUser = {
-      id: db.users.length ? Math.max(...db.users.map((u) => u.id)) + 1 : 1,
+      id: result.insertId,
       nombre: nombre.trim(),
       email: email.trim().toLowerCase(),
       password: hashedPassword,
       role,
       activo: true,
-
       telefono: telefono || '',
       apellidos: apellidos || '',
       matricula: matricula || '',
@@ -83,9 +111,6 @@ async function register(req, res) {
       especialidad: especialidad || '',
       codigoAdmin: codigoAdmin || ''
     };
-
-    db.users.push(newUser);
-    writeDb(db);
 
     const token = generateToken(newUser);
 
@@ -117,12 +142,12 @@ async function login(req, res) {
       });
     }
 
-    const db = readDb();
-    db.users = db.users || [];
-
-    const user = db.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
+    const [rows] = await db.execute(
+      'SELECT * FROM users WHERE email = ? LIMIT 1',
+      [email.trim().toLowerCase()]
     );
+
+    const user = rows[0];
 
     if (!user) {
       return res.status(401).json({
