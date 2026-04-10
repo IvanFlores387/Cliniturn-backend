@@ -29,8 +29,15 @@ async function findPatientDuplicate(pacienteId, fecha, horaInicio) {
 async function createAppointment(payload) {
   const [result] = await db.execute(`
     INSERT INTO appointments (
-      paciente_id, doctor_id, specialty_id, consultorio_id,
-      fecha, hora_inicio, hora_fin, motivo_consulta, estado
+      paciente_id,
+      doctor_id,
+      specialty_id,
+      consultorio_id,
+      fecha,
+      hora_inicio,
+      hora_fin,
+      motivo_consulta,
+      estado
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')
   `, [
@@ -85,7 +92,7 @@ async function updateAppointmentStatus(id, estado, extra = {}) {
 
 async function findMyAppointments(pacienteId) {
   const [rows] = await db.execute(`
-    SELECT 
+    SELECT
       a.*,
       s.nombre AS specialty_nombre,
       c.nombre AS consultorio_nombre,
@@ -105,7 +112,7 @@ async function findMyAppointments(pacienteId) {
 
 async function findDoctorAppointments(doctorId) {
   const [rows] = await db.execute(`
-    SELECT 
+    SELECT
       a.*,
       p.nombre AS paciente_nombre,
       p.apellidos AS paciente_apellidos,
@@ -122,16 +129,8 @@ async function findDoctorAppointments(doctorId) {
   return rows;
 }
 
-async function findAllAppointments(filters = {}) {
-  let sql = `
-    SELECT 
-      a.*,
-      s.nombre AS specialty_nombre,
-      c.nombre AS consultorio_nombre,
-      p.nombre AS paciente_nombre,
-      p.apellidos AS paciente_apellidos,
-      du.nombre AS doctor_nombre,
-      du.apellidos AS doctor_apellidos
+async function findAllAppointmentsPaginated(filters = {}, pagination = {}) {
+  let baseSql = `
     FROM appointments a
     INNER JOIN specialties s ON s.id = a.specialty_id
     INNER JOIN consultorios c ON c.id = a.consultorio_id
@@ -144,29 +143,55 @@ async function findAllAppointments(filters = {}) {
   const params = [];
 
   if (filters.estado) {
-    sql += ' AND a.estado = ?';
+    baseSql += ' AND a.estado = ?';
     params.push(filters.estado);
   }
 
   if (filters.fecha) {
-    sql += ' AND a.fecha = ?';
+    baseSql += ' AND a.fecha = ?';
     params.push(filters.fecha);
   }
 
   if (filters.medico) {
-    sql += ' AND CONCAT(du.nombre, " ", du.apellidos) LIKE ?';
+    baseSql += ' AND CONCAT(du.nombre, " ", COALESCE(du.apellidos, "")) LIKE ?';
     params.push(`%${filters.medico}%`);
   }
 
   if (filters.especialidad) {
-    sql += ' AND s.nombre LIKE ?';
+    baseSql += ' AND s.nombre LIKE ?';
     params.push(`%${filters.especialidad}%`);
   }
 
-  sql += ' ORDER BY a.fecha DESC, a.hora_inicio DESC';
+  const countSql = `SELECT COUNT(*) AS total ${baseSql}`;
+  const [countRows] = await db.execute(countSql, params);
+  const total = countRows[0]?.total || 0;
 
-  const [rows] = await db.execute(sql, params);
-  return rows;
+  const limit = Number(pagination.limit) > 0 ? Number(pagination.limit) : 10;
+  const offset = Number(pagination.offset) >= 0 ? Number(pagination.offset) : 0;
+
+  const dataSql = `
+    SELECT
+      a.*,
+      s.nombre AS specialty_nombre,
+      c.nombre AS consultorio_nombre,
+      p.nombre AS paciente_nombre,
+      p.apellidos AS paciente_apellidos,
+      du.nombre AS doctor_nombre,
+      du.apellidos AS doctor_apellidos
+    ${baseSql}
+    ORDER BY a.fecha DESC, a.hora_inicio DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  const dataParams = [...params, limit, offset];
+  const [rows] = await db.execute(dataSql, dataParams);
+
+  return {
+    rows,
+    total,
+    limit,
+    offset,
+  };
 }
 
 module.exports = {
@@ -177,5 +202,5 @@ module.exports = {
   updateAppointmentStatus,
   findMyAppointments,
   findDoctorAppointments,
-  findAllAppointments,
+  findAllAppointmentsPaginated,
 };

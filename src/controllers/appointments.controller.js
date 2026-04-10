@@ -1,6 +1,7 @@
 const appointmentsService = require('../services/appointments.service');
 const availabilityService = require('../services/availability.service');
 const appointmentsRepository = require('../repositories/appointments.repository');
+const appointmentsQueryService = require('../services/appointments-query.service');
 const { ok, fail } = require('../utils/api-response');
 
 async function getAvailability(req, res) {
@@ -46,9 +47,10 @@ async function getDoctor(req, res) {
   }
 }
 
+// 🔥 NUEVA VERSION CON PAGINACION + FILTROS
 async function getAll(req, res) {
   try {
-    const data = await appointmentsRepository.findAllAppointments(req.query);
+    const data = await appointmentsQueryService.getAllAppointments(req.query);
     return ok(res, data, 'Listado de citas obtenido.');
   } catch (error) {
     return fail(res, error.message, 400);
