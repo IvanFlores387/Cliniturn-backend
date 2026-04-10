@@ -3,7 +3,7 @@ const router = express.Router();
 
 const authMiddleware = require('../middlewares/auth.middleware');
 const roleMiddleware = require('../middlewares/role.middleware');
-const { validateCreateAppointment } = require('../validations/appointment.validation');
+const { validateCreateAppointment } = require('../validators/appointment.validation');
 const controller = require('../controllers/appointments.controller');
 
 router.use(authMiddleware);
