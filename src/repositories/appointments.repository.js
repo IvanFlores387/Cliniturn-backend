@@ -153,6 +153,16 @@ async function findAllAppointments(filters = {}) {
     params.push(filters.fecha);
   }
 
+  if (filters.medico) {
+    sql += ' AND CONCAT(du.nombre, " ", du.apellidos) LIKE ?';
+    params.push(`%${filters.medico}%`);
+  }
+
+  if (filters.especialidad) {
+    sql += ' AND s.nombre LIKE ?';
+    params.push(`%${filters.especialidad}%`);
+  }
+
   sql += ' ORDER BY a.fecha DESC, a.hora_inicio DESC';
 
   const [rows] = await db.execute(sql, params);
