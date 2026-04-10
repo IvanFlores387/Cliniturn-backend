@@ -20,6 +20,14 @@ function generateToken(user) {
   );
 }
 
+function normalizeString(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).trim();
+}
+
 async function register(req, res) {
   try {
     const {
@@ -33,27 +41,60 @@ async function register(req, res) {
       carrera,
       cedula,
       especialidad,
-      codigoAdmin
+      codigoAdmin,
     } = req.body;
 
-    if (!nombre || !email || !password || !role) {
+    const cleanNombre = normalizeString(nombre);
+    const cleanEmail = normalizeString(email).toLowerCase();
+    const cleanPassword = normalizeString(password);
+    const cleanRole = normalizeString(role).toLowerCase();
+
+    if (!cleanNombre || !cleanEmail || !cleanPassword || !cleanRole) {
       return res.status(400).json({
         ok: false,
-        message: 'Todos los campos son obligatorios.',
+        message: 'Todos los campos obligatorios deben ser completados.',
       });
     }
 
     const allowedRoles = ['paciente', 'medico', 'admin'];
-    if (!allowedRoles.includes(role)) {
+
+    if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         ok: false,
         message: 'Rol no válido.',
       });
     }
 
+    if (cleanRole === 'paciente') {
+      if (!normalizeString(matricula) || !normalizeString(carrera) || !normalizeString(apellidos)) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Para paciente debes capturar nombre, apellidos, matrícula y carrera.',
+        });
+      }
+    }
+
+    if (cleanRole === 'medico') {
+      if (!normalizeString(cedula) || !normalizeString(especialidad) || !normalizeString(apellidos)) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Para médico debes capturar nombre, apellidos, cédula y especialidad.',
+        });
+      }
+    }
+
+    if (cleanRole === 'admin') {
+      if (!normalizeString(codigoAdmin) || !normalizeString(apellidos)) {
+        return res.status(400).json({
+          ok: false,
+          message: 'Para administrador debes capturar nombre, apellidos y código de administrador.',
+        });
+      }
+    }
+
     const [existingUsers] = await db.execute(
       'SELECT id FROM users WHERE email = ? LIMIT 1',
-      [email.trim().toLowerCase()]
+      [cleanEmail]
     );
 
     if (existingUsers.length > 0) {
@@ -63,66 +104,100 @@ async function register(req, res) {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
-    const [result] = await db.execute(
-      `INSERT INTO users (
-        nombre,
-        email,
-        password,
-        role,
-        activo,
-        telefono,
-        apellidos,
-        matricula,
-        carrera,
-        cedula,
-        especialidad,
-        codigoAdmin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        nombre.trim(),
-        email.trim().toLowerCase(),
-        hashedPassword,
-        role,
-        true,
-        telefono || '',
-        apellidos || '',
-        matricula || '',
-        carrera || '',
-        cedula || '',
-        especialidad || '',
-        codigoAdmin || ''
-      ]
-    );
-
-    const newUser = {
-      id: result.insertId,
-      nombre: nombre.trim(),
-      email: email.trim().toLowerCase(),
+    const fullUserData = {
+      nombre: cleanNombre,
+      email: cleanEmail,
       password: hashedPassword,
-      role,
-      activo: true,
-      telefono: telefono || '',
-      apellidos: apellidos || '',
-      matricula: matricula || '',
-      carrera: carrera || '',
-      cedula: cedula || '',
-      especialidad: especialidad || '',
-      codigoAdmin: codigoAdmin || ''
+      role: cleanRole,
+      activo: 1,
+      telefono: normalizeString(telefono),
+      apellidos: normalizeString(apellidos),
+      matricula: normalizeString(matricula),
+      carrera: normalizeString(carrera),
+      cedula: normalizeString(cedula),
+      especialidad: normalizeString(especialidad),
+      codigoAdmin: normalizeString(codigoAdmin),
     };
 
-    const token = generateToken(newUser);
+    let result;
+
+    try {
+      const columns = [
+        'nombre',
+        'email',
+        'password',
+        'role',
+        'activo',
+        'telefono',
+        'apellidos',
+        'matricula',
+        'carrera',
+        'cedula',
+        'especialidad',
+        'codigoAdmin',
+      ];
+
+      const placeholders = columns.map(() => '?').join(', ');
+      const values = columns.map((column) => fullUserData[column]);
+
+      const [insertResult] = await db.execute(
+        `INSERT INTO users (${columns.join(', ')}) VALUES (${placeholders})`,
+        values
+      );
+
+      result = insertResult;
+    } catch (insertError) {
+      const badFieldErrors = [
+        'ER_BAD_FIELD_ERROR',
+        'ER_NO_DEFAULT_FOR_FIELD',
+        'ER_TRUNCATED_WRONG_VALUE',
+      ];
+
+      if (!badFieldErrors.includes(insertError.code)) {
+        throw insertError;
+      }
+
+      const fallbackColumns = ['nombre', 'email', 'password', 'role', 'activo'];
+      const fallbackPlaceholders = fallbackColumns.map(() => '?').join(', ');
+      const fallbackValues = fallbackColumns.map((column) => fullUserData[column]);
+
+      const [fallbackResult] = await db.execute(
+        `INSERT INTO users (${fallbackColumns.join(', ')}) VALUES (${fallbackPlaceholders})`,
+        fallbackValues
+      );
+
+      result = fallbackResult;
+    }
+
+    const [rows] = await db.execute(
+      'SELECT * FROM users WHERE id = ? LIMIT 1',
+      [result.insertId]
+    );
+
+    const savedUser = rows[0];
+
+    if (!savedUser) {
+      return res.status(201).json({
+        ok: true,
+        message: 'Usuario registrado correctamente.',
+      });
+    }
+
+    const token = generateToken(savedUser);
 
     return res.status(201).json({
       ok: true,
       message: 'Usuario registrado correctamente.',
       data: {
         token,
-        user: sanitizeUser(newUser),
+        user: sanitizeUser(savedUser),
       },
     });
   } catch (error) {
+    console.error('Error en register:', error);
+
     return res.status(500).json({
       ok: false,
       message: 'Error interno al registrar usuario.',
@@ -135,7 +210,10 @@ async function login(req, res) {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    const cleanEmail = normalizeString(email).toLowerCase();
+    const cleanPassword = normalizeString(password);
+
+    if (!cleanEmail || !cleanPassword) {
       return res.status(400).json({
         ok: false,
         message: 'Correo y contraseña son obligatorios.',
@@ -144,7 +222,7 @@ async function login(req, res) {
 
     const [rows] = await db.execute(
       'SELECT * FROM users WHERE email = ? LIMIT 1',
-      [email.trim().toLowerCase()]
+      [cleanEmail]
     );
 
     const user = rows[0];
@@ -163,7 +241,7 @@ async function login(req, res) {
       });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(cleanPassword, user.password);
 
     if (!isValidPassword) {
       return res.status(401).json({
@@ -183,6 +261,8 @@ async function login(req, res) {
       },
     });
   } catch (error) {
+    console.error('Error en login:', error);
+
     return res.status(500).json({
       ok: false,
       message: 'Error interno al iniciar sesión.',
