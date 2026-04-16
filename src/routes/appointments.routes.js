@@ -8,8 +8,6 @@ const controller = require('../controllers/appointments.controller');
 
 router.use(authMiddleware);
 
-router.get('/doctor/:id/availability', controller.getAvailability);
-
 router.post(
   '/',
   roleMiddleware('paciente'),
