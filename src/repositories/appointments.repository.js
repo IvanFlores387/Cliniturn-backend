@@ -75,9 +75,7 @@ async function findDoctorCollisionForUpdate(connection, doctorId, fecha, horaIni
       WHERE a.doctor_id = ?
         AND a.fecha = ?
         AND a.estado IN ('pendiente', 'confirmada', 'atendida')
-        AND (
-          ? < a.hora_fin AND ? > a.hora_inicio
-        )
+        AND (? < a.hora_fin AND ? > a.hora_inicio)
       LIMIT 1
       FOR UPDATE
     `,
@@ -97,12 +95,12 @@ async function findPatientDuplicateForUpdate(connection, patientId, fecha, horaI
     `
       SELECT
         a.id,
-        a.patient_id,
+        a.paciente_id,
         a.fecha,
         a.hora_inicio,
         a.estado
       FROM appointments a
-      WHERE a.patient_id = ?
+      WHERE a.paciente_id = ?
         AND a.fecha = ?
         AND a.hora_inicio = ?
         AND a.estado IN ('pendiente', 'confirmada', 'atendida')
@@ -136,7 +134,7 @@ async function createAppointmentTx(
   const [result] = await connection.execute(
     `
       INSERT INTO appointments (
-        patient_id,
+        paciente_id,
         doctor_id,
         specialty_id,
         consultorio_id,
@@ -171,7 +169,8 @@ async function findById(id) {
     `
       SELECT
         a.id,
-        a.patient_id,
+        a.paciente_id AS patient_id,
+        a.paciente_id,
         a.doctor_id,
         a.specialty_id,
         a.consultorio_id,
@@ -181,15 +180,19 @@ async function findById(id) {
         a.motivo_consulta,
         a.estado,
         a.notas_cancelacion,
+        a.cancelada_por,
         a.created_at,
         a.updated_at,
-        u.nombre AS doctor_nombre,
-        u.apellidos AS doctor_apellidos,
+        pu.nombre AS paciente_nombre,
+        pu.apellidos AS paciente_apellidos,
+        du.nombre AS doctor_nombre,
+        du.apellidos AS doctor_apellidos,
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
+      INNER JOIN users pu ON pu.id = a.paciente_id
       INNER JOIN doctors d ON d.id = a.doctor_id
-      INNER JOIN users u ON u.id = d.user_id
+      INNER JOIN users du ON du.id = d.user_id
       INNER JOIN specialties s ON s.id = a.specialty_id
       INNER JOIN consultorios c ON c.id = a.consultorio_id
       WHERE a.id = ?
@@ -205,7 +208,8 @@ async function findMyAppointments(patientId, { estado = '', fecha = '' } = {}) {
   let sql = `
     SELECT
       a.id,
-      a.patient_id,
+      a.paciente_id AS patient_id,
+      a.paciente_id,
       a.doctor_id,
       a.specialty_id,
       a.consultorio_id,
@@ -215,18 +219,19 @@ async function findMyAppointments(patientId, { estado = '', fecha = '' } = {}) {
       a.motivo_consulta,
       a.estado,
       a.notas_cancelacion,
+      a.cancelada_por,
       a.created_at,
       a.updated_at,
-      u.nombre AS doctor_nombre,
-      u.apellidos AS doctor_apellidos,
+      du.nombre AS doctor_nombre,
+      du.apellidos AS doctor_apellidos,
       s.nombre AS specialty_nombre,
       c.nombre AS consultorio_nombre
     FROM appointments a
     INNER JOIN doctors d ON d.id = a.doctor_id
-    INNER JOIN users u ON u.id = d.user_id
+    INNER JOIN users du ON du.id = d.user_id
     INNER JOIN specialties s ON s.id = a.specialty_id
     INNER JOIN consultorios c ON c.id = a.consultorio_id
-    WHERE a.patient_id = ?
+    WHERE a.paciente_id = ?
   `;
 
   const params = [Number(patientId)];
@@ -247,17 +252,18 @@ async function findMyAppointments(patientId, { estado = '', fecha = '' } = {}) {
   return rows;
 }
 
-async function updateStatus(id, estado, notasCancelacion = null) {
+async function updateStatus(id, estado, notasCancelacion = null, canceladaPor = null) {
   await db.execute(
     `
       UPDATE appointments
       SET
         estado = ?,
         notas_cancelacion = ?,
+        cancelada_por = ?,
         updated_at = NOW()
       WHERE id = ?
     `,
-    [estado, notasCancelacion, Number(id)]
+    [estado, notasCancelacion, canceladaPor, Number(id)]
   );
 
   return findById(id);
@@ -267,7 +273,8 @@ async function findDoctorAppointments(doctorId, { estado = '', fecha = '' } = {}
   let sql = `
     SELECT
       a.id,
-      a.patient_id,
+      a.paciente_id AS patient_id,
+      a.paciente_id,
       a.doctor_id,
       a.specialty_id,
       a.consultorio_id,
@@ -277,6 +284,7 @@ async function findDoctorAppointments(doctorId, { estado = '', fecha = '' } = {}
       a.motivo_consulta,
       a.estado,
       a.notas_cancelacion,
+      a.cancelada_por,
       a.created_at,
       a.updated_at,
       p.nombre AS paciente_nombre,
@@ -284,7 +292,7 @@ async function findDoctorAppointments(doctorId, { estado = '', fecha = '' } = {}
       s.nombre AS specialty_nombre,
       c.nombre AS consultorio_nombre
     FROM appointments a
-    INNER JOIN users p ON p.id = a.patient_id
+    INNER JOIN users p ON p.id = a.paciente_id
     INNER JOIN specialties s ON s.id = a.specialty_id
     INNER JOIN consultorios c ON c.id = a.consultorio_id
     WHERE a.doctor_id = ?
@@ -308,35 +316,10 @@ async function findDoctorAppointments(doctorId, { estado = '', fecha = '' } = {}
   return rows;
 }
 
-async function findAllAppointments({
-  estado = '',
-  fecha = '',
-  doctor_id = '',
-  specialty_id = '',
-} = {}) {
+function buildAdminAppointmentsBaseSql(filters = {}) {
   let sql = `
-    SELECT
-      a.id,
-      a.patient_id,
-      a.doctor_id,
-      a.specialty_id,
-      a.consultorio_id,
-      a.fecha,
-      a.hora_inicio,
-      a.hora_fin,
-      a.motivo_consulta,
-      a.estado,
-      a.notas_cancelacion,
-      a.created_at,
-      a.updated_at,
-      pu.nombre AS paciente_nombre,
-      pu.apellidos AS paciente_apellidos,
-      du.nombre AS doctor_nombre,
-      du.apellidos AS doctor_apellidos,
-      s.nombre AS specialty_nombre,
-      c.nombre AS consultorio_nombre
     FROM appointments a
-    INNER JOIN users pu ON pu.id = a.patient_id
+    INNER JOIN users pu ON pu.id = a.paciente_id
     INNER JOIN doctors d ON d.id = a.doctor_id
     INNER JOIN users du ON du.id = d.user_id
     INNER JOIN specialties s ON s.id = a.specialty_id
@@ -346,30 +329,112 @@ async function findAllAppointments({
 
   const params = [];
 
-  if (estado) {
+  if (filters.estado) {
     sql += ` AND a.estado = ?`;
-    params.push(estado);
+    params.push(filters.estado);
   }
 
-  if (fecha) {
+  if (filters.fecha) {
     sql += ` AND a.fecha = ?`;
-    params.push(fecha);
+    params.push(filters.fecha);
   }
 
-  if (doctor_id !== '' && doctor_id !== undefined && doctor_id !== null) {
-    sql += ` AND a.doctor_id = ?`;
-    params.push(Number(doctor_id));
+  if (filters.medico && String(filters.medico).trim()) {
+    sql += ` AND CONCAT_WS(' ', du.nombre, du.apellidos) LIKE ?`;
+    params.push(`%${String(filters.medico).trim()}%`);
   }
 
-  if (specialty_id !== '' && specialty_id !== undefined && specialty_id !== null) {
-    sql += ` AND a.specialty_id = ?`;
-    params.push(Number(specialty_id));
+  if (filters.especialidad && String(filters.especialidad).trim()) {
+    sql += ` AND s.nombre LIKE ?`;
+    params.push(`%${String(filters.especialidad).trim()}%`);
   }
 
-  sql += ` ORDER BY a.fecha DESC, a.hora_inicio DESC`;
+  return { sql, params };
+}
 
-  const [rows] = await db.execute(sql, params);
+async function findAllAppointments(filters = {}) {
+  const { sql, params } = buildAdminAppointmentsBaseSql(filters);
+
+  const [rows] = await db.execute(
+    `
+      SELECT
+        a.id,
+        a.paciente_id AS patient_id,
+        a.paciente_id,
+        a.doctor_id,
+        a.specialty_id,
+        a.consultorio_id,
+        a.fecha,
+        a.hora_inicio,
+        a.hora_fin,
+        a.motivo_consulta,
+        a.estado,
+        a.notas_cancelacion,
+        a.cancelada_por,
+        a.created_at,
+        a.updated_at,
+        pu.nombre AS paciente_nombre,
+        pu.apellidos AS paciente_apellidos,
+        du.nombre AS doctor_nombre,
+        du.apellidos AS doctor_apellidos,
+        s.nombre AS specialty_nombre,
+        c.nombre AS consultorio_nombre
+      ${sql}
+      ORDER BY a.fecha DESC, a.hora_inicio DESC
+    `,
+    params
+  );
+
   return rows;
+}
+
+async function findAllAppointmentsPaginated(filters = {}, pagination = { page: 1, limit: 10 }) {
+  const page = Number(pagination.page) > 0 ? Number(pagination.page) : 1;
+  const limit = Number(pagination.limit) > 0 ? Number(pagination.limit) : 10;
+  const offset = (page - 1) * limit;
+
+  const { sql, params } = buildAdminAppointmentsBaseSql(filters);
+
+  const [[countRow]] = await db.execute(
+    `SELECT COUNT(*) AS total ${sql}`,
+    params
+  );
+
+  const [rows] = await db.execute(
+    `
+      SELECT
+        a.id,
+        a.paciente_id AS patient_id,
+        a.paciente_id,
+        a.doctor_id,
+        a.specialty_id,
+        a.consultorio_id,
+        a.fecha,
+        a.hora_inicio,
+        a.hora_fin,
+        a.motivo_consulta,
+        a.estado,
+        a.notas_cancelacion,
+        a.cancelada_por,
+        a.created_at,
+        a.updated_at,
+        pu.nombre AS paciente_nombre,
+        pu.apellidos AS paciente_apellidos,
+        du.nombre AS doctor_nombre,
+        du.apellidos AS doctor_apellidos,
+        s.nombre AS specialty_nombre,
+        c.nombre AS consultorio_nombre
+      ${sql}
+      ORDER BY a.fecha DESC, a.hora_inicio DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    params
+  );
+
+  return {
+    rows,
+    total: Number(countRow.total || 0),
+  };
 }
 
 module.exports = {
@@ -384,4 +449,5 @@ module.exports = {
   updateStatus,
   findDoctorAppointments,
   findAllAppointments,
+  findAllAppointmentsPaginated,
 };

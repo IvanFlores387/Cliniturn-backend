@@ -6,7 +6,8 @@ async function findAll({ search = '', activo = '' } = {}) {
       c.id,
       c.nombre,
       c.ubicacion,
-      c.descripcion,
+      c.piso AS descripcion,
+      c.piso,
       c.activo,
       c.created_at,
       c.updated_at,
@@ -22,11 +23,13 @@ async function findAll({ search = '', activo = '' } = {}) {
   const params = [];
 
   if (search?.trim()) {
-    sql += ` AND (
-      c.nombre LIKE ?
-      OR c.ubicacion LIKE ?
-      OR c.descripcion LIKE ?
-    )`;
+    sql += `
+      AND (
+        c.nombre LIKE ?
+        OR c.ubicacion LIKE ?
+        OR c.piso LIKE ?
+      )
+    `;
     const searchTerm = `%${search.trim()}%`;
     params.push(searchTerm, searchTerm, searchTerm);
   }
@@ -49,7 +52,8 @@ async function findById(id) {
         c.id,
         c.nombre,
         c.ubicacion,
-        c.descripcion,
+        c.piso AS descripcion,
+        c.piso,
         c.activo,
         c.created_at,
         c.updated_at
@@ -57,7 +61,7 @@ async function findById(id) {
       WHERE c.id = ?
       LIMIT 1
     `,
-    [id]
+    [Number(id)]
   );
 
   return rows[0] || null;
@@ -88,7 +92,7 @@ async function create({ nombre, ubicacion = null, descripcion = null, activo = 1
       INSERT INTO consultorios (
         nombre,
         ubicacion,
-        descripcion,
+        piso,
         activo,
         created_at,
         updated_at
@@ -113,7 +117,7 @@ async function update(id, { nombre, ubicacion = null, descripcion = null, activo
       SET
         nombre = ?,
         ubicacion = ?,
-        descripcion = ?,
+        piso = ?,
         activo = ?,
         updated_at = NOW()
       WHERE id = ?

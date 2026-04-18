@@ -10,7 +10,7 @@ async function getPatientDashboard(patientId) {
         SUM(CASE WHEN estado = 'atendida' THEN 1 ELSE 0 END) AS atendidas,
         SUM(CASE WHEN estado = 'cancelada' THEN 1 ELSE 0 END) AS canceladas
       FROM appointments
-      WHERE patient_id = ?
+      WHERE paciente_id = ?
     `,
     [Number(patientId)]
   );
@@ -24,16 +24,16 @@ async function getPatientDashboard(patientId) {
         a.hora_fin,
         a.estado,
         a.motivo_consulta,
-        u.nombre AS doctor_nombre,
-        u.apellidos AS doctor_apellidos,
+        du.nombre AS doctor_nombre,
+        du.apellidos AS doctor_apellidos,
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
       INNER JOIN doctors d ON d.id = a.doctor_id
-      INNER JOIN users u ON u.id = d.user_id
+      INNER JOIN users du ON du.id = d.user_id
       INNER JOIN specialties s ON s.id = a.specialty_id
       INNER JOIN consultorios c ON c.id = a.consultorio_id
-      WHERE a.patient_id = ?
+      WHERE a.paciente_id = ?
         AND a.estado IN ('pendiente', 'confirmada')
         AND (
           a.fecha > CURDATE()
@@ -54,16 +54,16 @@ async function getPatientDashboard(patientId) {
         a.hora_fin,
         a.estado,
         a.motivo_consulta,
-        u.nombre AS doctor_nombre,
-        u.apellidos AS doctor_apellidos,
+        du.nombre AS doctor_nombre,
+        du.apellidos AS doctor_apellidos,
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
       INNER JOIN doctors d ON d.id = a.doctor_id
-      INNER JOIN users u ON u.id = d.user_id
+      INNER JOIN users du ON du.id = d.user_id
       INNER JOIN specialties s ON s.id = a.specialty_id
       INNER JOIN consultorios c ON c.id = a.consultorio_id
-      WHERE a.patient_id = ?
+      WHERE a.paciente_id = ?
       ORDER BY a.fecha DESC, a.hora_inicio DESC
       LIMIT 5
     `,
@@ -113,7 +113,7 @@ async function getDoctorDashboard(doctorId) {
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
-      INNER JOIN users u ON u.id = a.patient_id
+      INNER JOIN users u ON u.id = a.paciente_id
       INNER JOIN specialties s ON s.id = a.specialty_id
       INNER JOIN consultorios c ON c.id = a.consultorio_id
       WHERE a.doctor_id = ?
@@ -138,7 +138,7 @@ async function getDoctorDashboard(doctorId) {
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
-      INNER JOIN users u ON u.id = a.patient_id
+      INNER JOIN users u ON u.id = a.paciente_id
       INNER JOIN specialties s ON s.id = a.specialty_id
       INNER JOIN consultorios c ON c.id = a.consultorio_id
       WHERE a.doctor_id = ?
@@ -205,7 +205,7 @@ async function getAdminDashboard() {
         s.nombre AS specialty_nombre,
         c.nombre AS consultorio_nombre
       FROM appointments a
-      INNER JOIN users pu ON pu.id = a.patient_id
+      INNER JOIN users pu ON pu.id = a.paciente_id
       INNER JOIN doctors d ON d.id = a.doctor_id
       INNER JOIN users du ON du.id = d.user_id
       INNER JOIN specialties s ON s.id = a.specialty_id

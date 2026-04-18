@@ -28,7 +28,72 @@ function normalizeString(value) {
   return String(value).trim();
 }
 
+async function findSpecialtyForDoctor(connection, especialidadTexto) {
+  const clean = normalizeString(especialidadTexto);
+
+  if (clean) {
+    const [exactRows] = await connection.execute(
+      `
+        SELECT id, nombre
+        FROM specialties
+        WHERE activo = 1
+          AND LOWER(nombre) = LOWER(?)
+        LIMIT 1
+      `,
+      [clean]
+    );
+
+    if (exactRows[0]) {
+      return exactRows[0];
+    }
+
+    const [likeRows] = await connection.execute(
+      `
+        SELECT id, nombre
+        FROM specialties
+        WHERE activo = 1
+          AND LOWER(nombre) LIKE LOWER(?)
+        ORDER BY id ASC
+        LIMIT 1
+      `,
+      [`%${clean}%`]
+    );
+
+    if (likeRows[0]) {
+      return likeRows[0];
+    }
+  }
+
+  const [fallbackRows] = await connection.execute(
+    `
+      SELECT id, nombre
+      FROM specialties
+      WHERE activo = 1
+      ORDER BY id ASC
+      LIMIT 1
+    `
+  );
+
+  return fallbackRows[0] || null;
+}
+
+async function findDefaultConsultorio(connection) {
+  const [rows] = await connection.execute(
+    `
+      SELECT id
+      FROM consultorios
+      WHERE activo = 1
+      ORDER BY id ASC
+      LIMIT 1
+    `
+  );
+
+  return rows[0] || null;
+}
+
 async function register(req, res) {
+  const connection = await db.getConnection();
+
   try {
     const {
       nombre,
@@ -45,9 +110,13 @@ async function register(req, res) {
     } = req.body;
 
     const cleanNombre = normalizeString(nombre);
+    const cleanApellidos = normalizeString(apellidos);
     const cleanEmail = normalizeString(email).toLowerCase();
     const cleanPassword = normalizeString(password);
     const cleanRole = normalizeString(role).toLowerCase();
+    const cleanTelefono = normalizeString(telefono) || null;
+    const cleanCedula = normalizeString(cedula) || null;
+    const cleanEspecialidad = normalizeString(especialidad);
 
     if (!cleanNombre || !cleanEmail || !cleanPassword || !cleanRole) {
       return res.status(400).json({
@@ -65,8 +134,15 @@ async function register(req, res) {
       });
     }
 
+    if (!cleanApellidos) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Los apellidos son obligatorios.',
+      });
+    }
+
     if (cleanRole === 'paciente') {
-      if (!normalizeString(matricula) || !normalizeString(carrera) || !normalizeString(apellidos)) {
+      if (!normalizeString(matricula) || !normalizeString(carrera)) {
         return res.status(400).json({
           ok: false,
           message: 'Para paciente debes capturar nombre, apellidos, matrícula y carrera.',
@@ -75,7 +151,7 @@ async function register(req, res) {
     }
 
     if (cleanRole === 'medico') {
-      if (!normalizeString(cedula) || !normalizeString(especialidad) || !normalizeString(apellidos)) {
+      if (!cleanCedula || !cleanEspecialidad) {
         return res.status(400).json({
           ok: false,
           message: 'Para médico debes capturar nombre, apellidos, cédula y especialidad.',
@@ -84,7 +160,7 @@ async function register(req, res) {
     }
 
     if (cleanRole === 'admin') {
-      if (!normalizeString(codigoAdmin) || !normalizeString(apellidos)) {
+      if (!normalizeString(codigoAdmin)) {
         return res.status(400).json({
           ok: false,
           message: 'Para administrador debes capturar nombre, apellidos y código de administrador.',
@@ -92,7 +168,7 @@ async function register(req, res) {
       }
     }
 
-    const [existingUsers] = await db.execute(
+    const [existingUsers] = await connection.execute(
       'SELECT id FROM users WHERE email = ? LIMIT 1',
       [cleanEmail]
     );
@@ -106,85 +182,78 @@ async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
-    const fullUserData = {
-      nombre: cleanNombre,
-      email: cleanEmail,
-      password: hashedPassword,
-      role: cleanRole,
-      activo: 1,
-      telefono: normalizeString(telefono),
-      apellidos: normalizeString(apellidos),
-      matricula: normalizeString(matricula),
-      carrera: normalizeString(carrera),
-      cedula: normalizeString(cedula),
-      especialidad: normalizeString(especialidad),
-      codigoAdmin: normalizeString(codigoAdmin),
-    };
+    await connection.beginTransaction();
 
-    let result;
+    const [userResult] = await connection.execute(
+      `
+        INSERT INTO users (
+          nombre,
+          apellidos,
+          email,
+          password,
+          telefono,
+          role,
+          activo,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+      `,
+      [
+        cleanNombre,
+        cleanApellidos,
+        cleanEmail,
+        hashedPassword,
+        cleanTelefono,
+        cleanRole,
+      ]
+    );
 
-    try {
-      const columns = [
-        'nombre',
-        'email',
-        'password',
-        'role',
-        'activo',
-        'telefono',
-        'apellidos',
-        'matricula',
-        'carrera',
-        'cedula',
-        'especialidad',
-        'codigoAdmin',
-      ];
+    const userId = userResult.insertId;
 
-      const placeholders = columns.map(() => '?').join(', ');
-      const values = columns.map((column) => fullUserData[column]);
+    if (cleanRole === 'medico') {
+      const specialty = await findSpecialtyForDoctor(connection, cleanEspecialidad);
+      const consultorio = await findDefaultConsultorio(connection);
 
-      const [insertResult] = await db.execute(
-        `INSERT INTO users (${columns.join(', ')}) VALUES (${placeholders})`,
-        values
-      );
-
-      result = insertResult;
-    } catch (insertError) {
-      const badFieldErrors = [
-        'ER_BAD_FIELD_ERROR',
-        'ER_NO_DEFAULT_FOR_FIELD',
-        'ER_TRUNCATED_WRONG_VALUE',
-      ];
-
-      if (!badFieldErrors.includes(insertError.code)) {
-        throw insertError;
+      if (!specialty) {
+        throw new Error('No existe una especialidad activa para asignar al médico.');
       }
 
-      const fallbackColumns = ['nombre', 'email', 'password', 'role', 'activo'];
-      const fallbackPlaceholders = fallbackColumns.map(() => '?').join(', ');
-      const fallbackValues = fallbackColumns.map((column) => fullUserData[column]);
+      if (!consultorio) {
+        throw new Error('No existe un consultorio activo para asignar al médico.');
+      }
 
-      const [fallbackResult] = await db.execute(
-        `INSERT INTO users (${fallbackColumns.join(', ')}) VALUES (${fallbackPlaceholders})`,
-        fallbackValues
+      await connection.execute(
+        `
+          INSERT INTO doctors (
+            user_id,
+            specialty_id,
+            consultorio_id,
+            cedula,
+            duracion_cita_minutos,
+            activo,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, 30, 1, NOW(), NOW())
+        `,
+        [
+          Number(userId),
+          Number(specialty.id),
+          Number(consultorio.id),
+          cleanCedula,
+        ]
       );
-
-      result = fallbackResult;
     }
 
-    const [rows] = await db.execute(
+    await connection.commit();
+
+    const [rows] = await connection.execute(
       'SELECT * FROM users WHERE id = ? LIMIT 1',
-      [result.insertId]
+      [userId]
     );
 
     const savedUser = rows[0];
-
-    if (!savedUser) {
-      return res.status(201).json({
-        ok: true,
-        message: 'Usuario registrado correctamente.',
-      });
-    }
-
     const token = generateToken(savedUser);
 
     return res.status(201).json({
@@ -196,6 +265,7 @@ async function register(req, res) {
       },
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error en register:', error);
 
     return res.status(500).json({
@@ -203,6 +273,8 @@ async function register(req, res) {
       message: 'Error interno al registrar usuario.',
       error: error.message,
     });
+  } finally {
+    connection.release();
   }
 }
 

@@ -21,8 +21,8 @@ async function createAppointment({
       throw new Error('El motivo de consulta es obligatorio.');
     }
 
-    if (String(motivo_consulta).trim().length < 5) {
-      throw new Error('El motivo de consulta debe tener al menos 5 caracteres.');
+    if (String(motivo_consulta).trim().length < 3) {
+      throw new Error('El motivo de consulta debe tener al menos 3 caracteres.');
     }
 
     if (!isEndAfterStart(start, end)) {
@@ -111,11 +111,15 @@ async function getMyAppointments(patientId, filters) {
   return appointmentsRepository.findMyAppointments(patientId, filters);
 }
 
-async function cancelMyAppointment(appointmentId) {
+async function cancelMyAppointment(appointmentId, authUser) {
   const appointment = await appointmentsRepository.findById(appointmentId);
 
   if (!appointment) {
     throw new Error('La cita no existe.');
+  }
+
+  if (Number(appointment.paciente_id) !== Number(authUser.id)) {
+    throw new Error('No autorizado para cancelar esta cita.');
   }
 
   if (!['pendiente', 'confirmada'].includes(appointment.estado)) {
@@ -125,19 +129,28 @@ async function cancelMyAppointment(appointmentId) {
   return appointmentsRepository.updateStatus(
     appointmentId,
     'cancelada',
-    'Cancelada por el paciente'
+    'Cancelada por el paciente',
+    'paciente'
   );
 }
 
 async function getDoctorAppointments(doctorId, filters) {
+  if (!doctorId) {
+    throw new Error('El usuario médico no tiene un doctor_id asociado.');
+  }
+
   return appointmentsRepository.findDoctorAppointments(doctorId, filters);
 }
 
-async function confirmDoctorAppointment(appointmentId) {
+async function confirmDoctorAppointment(appointmentId, authUser) {
   const appointment = await appointmentsRepository.findById(appointmentId);
 
   if (!appointment) {
     throw new Error('La cita no existe.');
+  }
+
+  if (authUser.role === 'medico' && Number(appointment.doctor_id) !== Number(authUser.doctor_id)) {
+    throw new Error('No autorizado para confirmar esta cita.');
   }
 
   if (appointment.estado !== 'pendiente') {
@@ -147,11 +160,15 @@ async function confirmDoctorAppointment(appointmentId) {
   return appointmentsRepository.updateStatus(appointmentId, 'confirmada');
 }
 
-async function cancelDoctorAppointment(appointmentId) {
+async function cancelDoctorAppointment(appointmentId, authUser) {
   const appointment = await appointmentsRepository.findById(appointmentId);
 
   if (!appointment) {
     throw new Error('La cita no existe.');
+  }
+
+  if (authUser.role === 'medico' && Number(appointment.doctor_id) !== Number(authUser.doctor_id)) {
+    throw new Error('No autorizado para cancelar esta cita.');
   }
 
   if (!['pendiente', 'confirmada'].includes(appointment.estado)) {
@@ -161,15 +178,20 @@ async function cancelDoctorAppointment(appointmentId) {
   return appointmentsRepository.updateStatus(
     appointmentId,
     'cancelada',
-    'Cancelada por el médico'
+    authUser.role === 'admin' ? 'Cancelada por el administrador' : 'Cancelada por el médico',
+    authUser.role === 'admin' ? 'admin' : 'medico'
   );
 }
 
-async function attendDoctorAppointment(appointmentId) {
+async function attendDoctorAppointment(appointmentId, authUser) {
   const appointment = await appointmentsRepository.findById(appointmentId);
 
   if (!appointment) {
     throw new Error('La cita no existe.');
+  }
+
+  if (Number(appointment.doctor_id) !== Number(authUser.doctor_id)) {
+    throw new Error('No autorizado para marcar esta cita como atendida.');
   }
 
   if (appointment.estado !== 'confirmada') {

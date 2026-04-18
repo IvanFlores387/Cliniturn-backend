@@ -15,12 +15,12 @@ router.post(
   controller.create
 );
 
-router.get('/my', roleMiddleware('paciente'), controller.getMy);
-router.get('/doctor', roleMiddleware('medico'), controller.getDoctor);
-router.get('/', roleMiddleware('admin'), controller.getAll);
+router.get('/my', roleMiddleware('paciente'), controller.myAppointments);
+router.get('/doctor', roleMiddleware('medico'), controller.doctorAppointments);
+router.get('/', roleMiddleware('admin'), controller.allAppointments);
 
-router.patch('/:id/confirm', roleMiddleware('medico'), controller.confirm);
-router.patch('/:id/cancel', roleMiddleware('paciente', 'medico', 'admin'), controller.cancel);
-router.patch('/:id/attended', roleMiddleware('medico'), controller.attended);
+router.patch('/:id/confirm', roleMiddleware('medico'), controller.confirmAppointment);
+router.patch('/:id/cancel', roleMiddleware('paciente', 'medico', 'admin'), controller.cancelAppointment);
+router.patch('/:id/attended', roleMiddleware('medico'), controller.attendedAppointment);
 
 module.exports = router;
