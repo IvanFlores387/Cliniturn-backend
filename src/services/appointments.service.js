@@ -1,4 +1,5 @@
 const appointmentsRepository = require('../repositories/appointments.repository');
+const doctorSchedulesRepository = require('../repositories/doctor-schedules.repository');
 const { isPastDateTime, isEndAfterStart, normalizeTime } = require('../utils/time');
 
 async function createAppointment({
@@ -45,6 +46,8 @@ async function createAppointment({
     if (Number(doctor.activo) !== 1 || Number(doctor.user_activo) !== 1) {
       throw new Error('No se permite agendar con médicos inactivos.');
     }
+
+    await doctorSchedulesRepository.ensureDefaultSchedules(doctor_id, connection);
 
     const schedule = await appointmentsRepository.findDoctorScheduleForSlot(
       connection,

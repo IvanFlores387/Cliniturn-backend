@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const doctorSchedulesRepository = require('./doctor-schedules.repository');
 
 async function findAll({
   search = '',
@@ -208,6 +209,8 @@ async function create({
         Number(activo),
       ]
     );
+
+    await doctorSchedulesRepository.ensureDefaultSchedules(doctorResult.insertId, connection);
 
     await connection.commit();
 

@@ -117,6 +117,28 @@ async function findPatientDuplicateForUpdate(connection, patientId, fecha, horaI
   return rows[0] || null;
 }
 
+async function findDoctorAppointmentsByDate(doctorId, fecha, connection = db) {
+  const [rows] = await connection.execute(
+    `
+      SELECT
+        a.id,
+        a.doctor_id,
+        a.fecha,
+        a.hora_inicio,
+        a.hora_fin,
+        a.estado
+      FROM appointments a
+      WHERE a.doctor_id = ?
+        AND a.fecha = ?
+        AND a.estado IN ('pendiente', 'confirmada', 'atendida')
+      ORDER BY a.hora_inicio ASC
+    `,
+    [Number(doctorId), fecha]
+  );
+
+  return rows;
+}
+
 async function createAppointmentTx(
   connection,
   {
@@ -450,4 +472,5 @@ module.exports = {
   findDoctorAppointments,
   findAllAppointments,
   findAllAppointmentsPaginated,
+  findDoctorAppointmentsByDate,
 };
