@@ -8,6 +8,8 @@ const appointmentsRoutes = require('./routes/appointments.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const consultoriosRoutes = require('./routes/consultorios.routes');
 const adminDoctorsRoutes = require('./routes/admin-doctors.routes');
+const recordsRoutes = require('./routes/records.routes');
+const consultationsRoutes = require('./routes/consultations.routes');
 
 const app = express();
 
@@ -51,6 +53,8 @@ app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/consultorios', consultoriosRoutes);
 app.use('/api/admin/doctors', adminDoctorsRoutes);
+app.use('/api/records', recordsRoutes);
+app.use('/api/consultations', consultationsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

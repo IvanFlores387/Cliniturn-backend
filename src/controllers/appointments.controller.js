@@ -2,6 +2,16 @@ const appointmentsService = require('../services/appointments.service');
 const appointmentsQueryService = require('../services/appointments-query.service');
 const { ok, fail } = require('../utils/api-response');
 
+
+async function getById(req, res) {
+  try {
+    const data = await appointmentsService.getAppointmentById(req.params.id, req.user);
+    return ok(res, data, 'Cita obtenida correctamente.');
+  } catch (error) {
+    return fail(res, error.message, 404);
+  }
+}
+
 async function create(req, res) {
   try {
     const data = await appointmentsService.createAppointment({
@@ -101,6 +111,7 @@ async function attendedAppointment(req, res) {
 }
 
 module.exports = {
+  getById,
   create,
   myAppointments,
   doctorAppointments,

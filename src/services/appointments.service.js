@@ -2,6 +2,25 @@ const appointmentsRepository = require('../repositories/appointments.repository'
 const doctorSchedulesRepository = require('../repositories/doctor-schedules.repository');
 const { isPastDateTime, isEndAfterStart, normalizeTime } = require('../utils/time');
 
+
+async function getAppointmentById(appointmentId, authUser) {
+  const appointment = await appointmentsRepository.findById(appointmentId);
+
+  if (!appointment) {
+    throw new Error('La cita no existe.');
+  }
+
+  if (authUser.role === 'paciente' && Number(appointment.paciente_id) !== Number(authUser.id)) {
+    throw new Error('No autorizado para consultar esta cita.');
+  }
+
+  if (authUser.role === 'medico' && Number(appointment.doctor_id) !== Number(authUser.doctor_id)) {
+    throw new Error('No autorizado para consultar esta cita.');
+  }
+
+  return appointment;
+}
+
 async function createAppointment({
   patient_id,
   doctor_id,
@@ -209,6 +228,7 @@ async function getAllAppointments(filters) {
 }
 
 module.exports = {
+  getAppointmentById,
   createAppointment,
   getMyAppointments,
   cancelMyAppointment,
