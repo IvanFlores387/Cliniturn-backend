@@ -141,7 +141,7 @@ async function findById(id) {
         a.motivo_consulta,
         p.nombre AS paciente_nombre,
         p.apellidos AS paciente_apellidos,
-        p.matricula AS paciente_matricula,
+        CAST(p.id AS CHAR) AS paciente_matricula,
         du.nombre AS doctor_nombre,
         du.apellidos AS doctor_apellidos,
         s.nombre AS specialty_nombre,
