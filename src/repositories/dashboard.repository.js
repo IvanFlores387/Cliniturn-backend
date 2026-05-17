@@ -15,7 +15,7 @@ async function getPatientDashboard(patientId) {
     [Number(patientId)]
   );
 
-  const [nextAppointmentRows] = await db.execute(
+  const [upcomingAppointments] = await db.execute(
     `
       SELECT
         a.id,
@@ -40,7 +40,7 @@ async function getPatientDashboard(patientId) {
           OR (a.fecha = CURDATE() AND a.hora_inicio >= CURTIME())
         )
       ORDER BY a.fecha ASC, a.hora_inicio ASC
-      LIMIT 1
+      LIMIT 5
     `,
     [Number(patientId)]
   );
@@ -78,7 +78,8 @@ async function getPatientDashboard(patientId) {
       atendidas: Number(totals.atendidas || 0),
       canceladas: Number(totals.canceladas || 0),
     },
-    next_appointment: nextAppointmentRows[0] || null,
+    next_appointment: upcomingAppointments[0] || null,
+    upcoming_appointments: upcomingAppointments,
     recent_appointments: recentAppointments,
   };
 }
@@ -92,10 +93,16 @@ async function getDoctorDashboard(doctorId) {
         SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) AS pendientes,
         SUM(CASE WHEN estado = 'confirmada' THEN 1 ELSE 0 END) AS confirmadas,
         SUM(CASE WHEN estado = 'atendida' THEN 1 ELSE 0 END) AS atendidas,
-        SUM(CASE WHEN estado = 'cancelada' THEN 1 ELSE 0 END) AS canceladas
+        SUM(CASE WHEN estado = 'cancelada' THEN 1 ELSE 0 END) AS canceladas,
+        COUNT(DISTINCT CASE WHEN estado = 'atendida' THEN paciente_id END) AS pacientes_atendidos
       FROM appointments
       WHERE doctor_id = ?
     `,
+    [Number(doctorId)]
+  );
+
+  const [[consultationStats]] = await db.execute(
+    `SELECT COUNT(*) AS consultas_registradas FROM consultations WHERE doctor_id = ?`,
     [Number(doctorId)]
   );
 
@@ -108,6 +115,7 @@ async function getDoctorDashboard(doctorId) {
         a.hora_fin,
         a.estado,
         a.motivo_consulta,
+        u.id AS paciente_id,
         u.nombre AS paciente_nombre,
         u.apellidos AS paciente_apellidos,
         s.nombre AS specialty_nombre,
@@ -133,6 +141,7 @@ async function getDoctorDashboard(doctorId) {
         a.hora_fin,
         a.estado,
         a.motivo_consulta,
+        u.id AS paciente_id,
         u.nombre AS paciente_nombre,
         u.apellidos AS paciente_apellidos,
         s.nombre AS specialty_nombre,
@@ -161,6 +170,8 @@ async function getDoctorDashboard(doctorId) {
       confirmadas: Number(totals.confirmadas || 0),
       atendidas: Number(totals.atendidas || 0),
       canceladas: Number(totals.canceladas || 0),
+      pacientes_atendidos: Number(totals.pacientes_atendidos || 0),
+      consultas_registradas: Number(consultationStats.consultas_registradas || 0),
     },
     today_appointments: todayAppointments,
     upcoming_appointments: upcomingAppointments,
@@ -184,9 +195,21 @@ async function getAdminDashboard() {
   const [[catalogStats]] = await db.execute(
     `
       SELECT
+        (SELECT COUNT(*) FROM users WHERE role = 'paciente' AND activo = 1) AS pacientes_activos,
         (SELECT COUNT(*) FROM doctors d INNER JOIN users u ON u.id = d.user_id WHERE d.activo = 1 AND u.activo = 1) AS medicos_activos,
         (SELECT COUNT(*) FROM consultorios WHERE activo = 1) AS consultorios_activos,
         (SELECT COUNT(*) FROM specialties WHERE activo = 1) AS especialidades_activas
+    `
+  );
+
+  const [[topSpecialty]] = await db.execute(
+    `
+      SELECT s.nombre, COUNT(*) AS total
+      FROM appointments a
+      INNER JOIN specialties s ON s.id = a.specialty_id
+      GROUP BY s.id, s.nombre
+      ORDER BY total DESC, s.nombre ASC
+      LIMIT 1
     `
   );
 
@@ -225,10 +248,14 @@ async function getAdminDashboard() {
       canceladas: Number(totals.canceladas || 0),
     },
     catalog_stats: {
+      pacientes_activos: Number(catalogStats.pacientes_activos || 0),
       medicos_activos: Number(catalogStats.medicos_activos || 0),
       consultorios_activos: Number(catalogStats.consultorios_activos || 0),
       especialidades_activas: Number(catalogStats.especialidades_activas || 0),
     },
+    top_specialty: topSpecialty
+      ? { nombre: topSpecialty.nombre, total: Number(topSpecialty.total || 0) }
+      : null,
     recent_appointments: recentAppointments,
   };
 }
