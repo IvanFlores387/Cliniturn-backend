@@ -42,7 +42,7 @@ async function getPatientGeneralData(patientId) {
         u.apellidos AS paciente_apellidos,
         u.email AS paciente_email,
         u.telefono AS paciente_telefono,
-        u.matricula AS paciente_matricula,
+        CAST(u.id AS CHAR) AS paciente_matricula,
         mr.id AS record_id,
         mr.created_at AS record_created_at,
         mr.updated_at AS record_updated_at
@@ -166,7 +166,7 @@ async function getDoctorPatients(doctorId) {
         u.apellidos AS paciente_apellidos,
         u.email AS paciente_email,
         u.telefono AS paciente_telefono,
-        u.matricula AS paciente_matricula,
+        CAST(u.id AS CHAR) AS paciente_matricula,
         COUNT(DISTINCT a.id) AS total_citas,
         SUM(CASE WHEN a.estado = 'atendida' THEN 1 ELSE 0 END) AS citas_atendidas,
         MAX(a.fecha) AS ultima_cita
@@ -174,7 +174,7 @@ async function getDoctorPatients(doctorId) {
       INNER JOIN users u ON u.id = a.paciente_id
       WHERE a.doctor_id = ?
         AND a.estado IN ('confirmada', 'atendida')
-      GROUP BY u.id, u.nombre, u.apellidos, u.email, u.telefono, u.matricula
+      GROUP BY u.id, u.nombre, u.apellidos, u.email, u.telefono
       ORDER BY ultima_cita DESC, u.nombre ASC
     `,
     [Number(doctorId)]
