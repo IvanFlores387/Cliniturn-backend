@@ -1,26 +1,28 @@
 const mysql = require('mysql2/promise');
+const env = require('./env');
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME,
+  host: env.db.host,
+  port: env.db.port,
+  user: env.db.user,
+  password: env.db.password,
+  database: env.db.database,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: env.db.connectionLimit,
   queueLimit: 0,
+  namedPlaceholders: false,
 });
 
 async function testConnection() {
+  const connection = await pool.getConnection();
+
   try {
-    const connection = await pool.getConnection();
+    await connection.ping();
     console.log('Conectado a MySQL correctamente');
+  } finally {
     connection.release();
-  } catch (error) {
-    console.error('Error al conectar con MySQL:', error.message);
   }
 }
 
-testConnection();
-
 module.exports = pool;
+module.exports.testConnection = testConnection;

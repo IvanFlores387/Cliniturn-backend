@@ -17,39 +17,41 @@ async function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, env.jwtSecret);
 
     const [rows] = await db.execute(
-      'SELECT * FROM users WHERE id = ? LIMIT 1',
+      `
+        SELECT id, nombre, apellidos, email, telefono, role, activo, created_at, updated_at
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+      `,
       [payload.sub]
     );
 
     const user = rows[0];
 
-    if (!user) {
+    if (!user || !user.activo) {
       return res.status(401).json({
         ok: false,
-        message: 'Usuario no válido.',
+        message: 'Usuario no válido o inactivo.',
       });
     }
 
-    const { password, ...safeUser } = user;
-
-    if (safeUser.role === 'medico') {
+    if (user.role === 'medico') {
       const [doctorRows] = await db.execute(
         'SELECT id FROM doctors WHERE user_id = ? LIMIT 1',
-        [safeUser.id]
+        [user.id]
       );
 
       if (doctorRows.length > 0) {
-        safeUser.doctor_id = doctorRows[0].id;
+        user.doctor_id = doctorRows[0].id;
       }
     }
 
-    req.user = safeUser;
+    req.user = user;
     next();
   } catch (error) {
     return res.status(401).json({
       ok: false,
       message: 'Token inválido o expirado.',
-      error: error.message,
     });
   }
 }

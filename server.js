@@ -1,8 +1,19 @@
-require('dotenv').config();
 const app = require('./src/app');
+const env = require('./src/config/env');
+const db = require('./src/config/db');
 
-const PORT = process.env.PORT || 3000;
+async function bootstrap() {
+  try {
+    await db.testConnection();
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
-});
+    app.listen(env.port, () => {
+      console.log(`Servidor CliniTurn corriendo en puerto ${env.port}`);
+      console.log(`Documentación Swagger: http://localhost:${env.port}/api/docs`);
+    });
+  } catch (error) {
+    console.error('No se pudo iniciar el servidor:', error.message);
+    process.exit(1);
+  }
+}
+
+bootstrap();

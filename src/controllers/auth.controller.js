@@ -16,7 +16,9 @@ function generateToken(user) {
       role: user.role,
     },
     env.jwtSecret,
-    { expiresIn: env.jwtExpiresIn }
+    {
+      expiresIn: env.jwtExpiresIn,
+    }
   );
 }
 
@@ -93,6 +95,7 @@ async function findDefaultConsultorio(connection) {
 
 async function register(req, res) {
   const connection = await db.getConnection();
+  let transactionStarted = false;
 
   try {
     const {
@@ -115,8 +118,11 @@ async function register(req, res) {
     const cleanPassword = normalizeString(password);
     const cleanRole = normalizeString(role).toLowerCase();
     const cleanTelefono = normalizeString(telefono) || null;
+    const cleanMatricula = normalizeString(matricula);
+    const cleanCarrera = normalizeString(carrera);
     const cleanCedula = normalizeString(cedula) || null;
     const cleanEspecialidad = normalizeString(especialidad);
+    const cleanCodigoAdmin = normalizeString(codigoAdmin);
 
     if (!cleanNombre || !cleanEmail || !cleanPassword || !cleanRole) {
       return res.status(400).json({
@@ -142,10 +148,11 @@ async function register(req, res) {
     }
 
     if (cleanRole === 'paciente') {
-      if (!normalizeString(matricula) || !normalizeString(carrera)) {
+      if (!cleanMatricula || !cleanCarrera) {
         return res.status(400).json({
           ok: false,
-          message: 'Para paciente debes capturar nombre, apellidos, matrícula y carrera.',
+          message:
+            'Para paciente debes capturar nombre, apellidos, matrícula y carrera.',
         });
       }
     }
@@ -154,22 +161,48 @@ async function register(req, res) {
       if (!cleanCedula || !cleanEspecialidad) {
         return res.status(400).json({
           ok: false,
-          message: 'Para médico debes capturar nombre, apellidos, cédula y especialidad.',
+          message:
+            'Para médico debes capturar nombre, apellidos, cédula y especialidad.',
         });
       }
     }
 
     if (cleanRole === 'admin') {
-      if (!normalizeString(codigoAdmin)) {
+      if (!cleanCodigoAdmin) {
         return res.status(400).json({
           ok: false,
-          message: 'Para administrador debes capturar nombre, apellidos y código de administrador.',
+          message:
+            'Para administrador debes capturar nombre, apellidos y código de administrador.',
+        });
+      }
+
+      if (!env.adminRegisterCode) {
+        console.error(
+          'La variable ADMIN_REGISTER_CODE no está configurada en el servidor.'
+        );
+
+        return res.status(500).json({
+          ok: false,
+          message:
+            'El registro de administradores no está configurado correctamente.',
+        });
+      }
+
+      if (cleanCodigoAdmin !== env.adminRegisterCode) {
+        return res.status(403).json({
+          ok: false,
+          message: 'Código de administrador inválido.',
         });
       }
     }
 
     const [existingUsers] = await connection.execute(
-      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      `
+        SELECT id
+        FROM users
+        WHERE email = ?
+        LIMIT 1
+      `,
       [cleanEmail]
     );
 
@@ -183,6 +216,7 @@ async function register(req, res) {
     const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
     await connection.beginTransaction();
+    transactionStarted = true;
 
     const [userResult] = await connection.execute(
       `
@@ -212,15 +246,23 @@ async function register(req, res) {
     const userId = userResult.insertId;
 
     if (cleanRole === 'medico') {
-      const specialty = await findSpecialtyForDoctor(connection, cleanEspecialidad);
+      const specialty = await findSpecialtyForDoctor(
+        connection,
+        cleanEspecialidad
+      );
+
       const consultorio = await findDefaultConsultorio(connection);
 
       if (!specialty) {
-        throw new Error('No existe una especialidad activa para asignar al médico.');
+        throw new Error(
+          'No existe una especialidad activa para asignar al médico.'
+        );
       }
 
       if (!consultorio) {
-        throw new Error('No existe un consultorio activo para asignar al médico.');
+        throw new Error(
+          'No existe un consultorio activo para asignar al médico.'
+        );
       }
 
       await connection.execute(
@@ -247,13 +289,26 @@ async function register(req, res) {
     }
 
     await connection.commit();
+    transactionStarted = false;
 
     const [rows] = await connection.execute(
-      'SELECT * FROM users WHERE id = ? LIMIT 1',
+      `
+        SELECT *
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+      `,
       [userId]
     );
 
     const savedUser = rows[0];
+
+    if (!savedUser) {
+      throw new Error(
+        'El usuario fue registrado, pero no pudo recuperarse posteriormente.'
+      );
+    }
+
     const token = generateToken(savedUser);
 
     return res.status(201).json({
@@ -265,7 +320,10 @@ async function register(req, res) {
       },
     });
   } catch (error) {
-    await connection.rollback();
+    if (transactionStarted) {
+      await connection.rollback();
+    }
+
     console.error('Error en register:', error);
 
     return res.status(500).json({
@@ -293,7 +351,12 @@ async function login(req, res) {
     }
 
     const [rows] = await db.execute(
-      'SELECT * FROM users WHERE email = ? LIMIT 1',
+      `
+        SELECT *
+        FROM users
+        WHERE email = ?
+        LIMIT 1
+      `,
       [cleanEmail]
     );
 
@@ -313,7 +376,10 @@ async function login(req, res) {
       });
     }
 
-    const isValidPassword = await bcrypt.compare(cleanPassword, user.password);
+    const isValidPassword = await bcrypt.compare(
+      cleanPassword,
+      user.password
+    );
 
     if (!isValidPassword) {
       return res.status(401).json({
