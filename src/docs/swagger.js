@@ -11,11 +11,15 @@ const swaggerSpec = swaggerJSDoc({
       description: 'Documentación de servicios web para CliniTurn.',
     },
     servers: [
-      {
-        url: `http://localhost:${env.port}`,
-        description: 'Servidor local',
-      },
-    ],
+  {
+    url:
+      process.env.RENDER_EXTERNAL_URL ||
+      `http://localhost:${env.port}`,
+    description: env.isProduction
+      ? 'Servidor de producción'
+      : 'Servidor local',
+  },
+],
     components: {
       securitySchemes: {
         bearerAuth: {
