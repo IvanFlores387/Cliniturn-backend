@@ -25,6 +25,10 @@ const setupSwagger = require('./docs/swagger');
 
 const app = express();
 
+// Render ejecuta la aplicación detrás de un proxy.
+// Esto permite que express-rate-limit identifique correctamente la IP real.
+app.set('trust proxy', 1);
+
 /*
 |--------------------------------------------------------------------------
 | Seguridad general
@@ -35,7 +39,6 @@ const app = express();
 | - Helmet
 | - Rate limiting
 | - Protección HTTP
-| - Configuración de confianza del proxy
 |
 */
 securityMiddleware(app);
@@ -46,11 +49,8 @@ securityMiddleware(app);
 |--------------------------------------------------------------------------
 */
 
-// Acepta solicitudes con contenido JSON.
-// El límite evita que se envíen cuerpos excesivamente grandes.
 app.use(express.json({ limit: '1mb' }));
 
-// Permite recibir datos enviados mediante formularios HTML.
 app.use(
   express.urlencoded({
     extended: true,
@@ -71,7 +71,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Ruta utilizada para comprobar que el backend sigue disponible.
 app.get('/health', (req, res) => {
   res.status(200).json({
     ok: true,
@@ -111,9 +110,6 @@ app.use('/api/history', historyRoutes);
 |--------------------------------------------------------------------------
 | Manejo de rutas inexistentes
 |--------------------------------------------------------------------------
-|
-| Debe colocarse después de todas las rutas.
-|
 */
 
 app.use(notFoundMiddleware);
@@ -122,9 +118,6 @@ app.use(notFoundMiddleware);
 |--------------------------------------------------------------------------
 | Manejo global de errores
 |--------------------------------------------------------------------------
-|
-| Debe ser el último middleware registrado.
-|
 */
 
 app.use(errorMiddleware);
